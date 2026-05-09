@@ -1,13 +1,13 @@
 import React, { useEffect, useState } from 'react'
-import { NavLink } from 'react-router-dom'
+import { NavLink, useLocation } from 'react-router-dom'  // ← add useLocation here
 
 export default function Products() {
+    const location = useLocation();  // ← add this
+    const [productData, setProductData] = useState([]);  // ← only ONE time
 
     useEffect(() => {
         getProducts();
-    }, [])
-
-    const [productData, setProductData] = useState([]);
+    }, [location])  // ← change [] to [location]
 
     const getProducts = async (e) => {
 
