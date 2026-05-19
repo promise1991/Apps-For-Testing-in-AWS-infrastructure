@@ -1,0 +1,111 @@
+# ================================================================
+# APP REPO - DEV PIPELINE
+# ================================================================
+# WHEN: triggers every time you push code to dev branch
+# WHAT: runs tests → if pass, signals infra repo to deploy
+# WHY: separates app concerns from infrastructure concerns
+# ================================================================
+
+name: Dev Pipeline
+
+on:
+  push:
+    branches:
+      - dev
+
+jobs:
+
+# ================================================================
+# JOB 1 - TEST
+# Runs tests on both Frontend and Backend
+# If ANY test fails, pipeline stops here
+# Broken code never reaches infrastructure!
+# ================================================================
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      # Downloads your code onto GitHub's temporary machine
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Install Node.js 18 (same version as your EC2 instances)
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      # Install Backend packages from package.json
+      - name: Install Backend dependencies
+        working-directory: Backend
+        run: npm install
+
+      # No real tests yet, just verify syntax is correct
+      - name: Verify Backend syntax
+        working-directory: Backend
+        run: node --check index.js
+
+      # Install Frontend packages
+      - name: Install Frontend dependencies
+        working-directory: Frontend
+        run: npm install
+
+      # Run React tests
+      # --watchAll=false: run once and exit (not interactive)
+      # --passWithNoTests: don't fail if no test files found
+      - name: Run Frontend tests
+        working-directory: Frontend
+        run: npm test -- --watchAll=false --passWithNoTests
+        env:
+          CI: false
+
+      # Build Frontend to confirm it compiles successfully
+      - name: Build Frontend
+        working-directory: Frontend
+        run: npm run build
+        env:
+          CI: false
+
+# ================================================================
+# JOB 2 - TRIGGER INFRASTRUCTURE
+# Only runs if Job 1 (tests) passes!
+# Sends a signal to the infra repo to start deployment
+# ================================================================
+  trigger-deploy:
+    name: Trigger Infrastructure Deploy
+    runs-on: ubuntu-latest
+    needs: test  # waits for tests to pass first!
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Send signal to infra repo
+      # PAT_TOKEN: proves we are allowed to trigger infra repo
+      # repository-dispatch: GitHub's way of sending signals between repos
+      # event-type: a label the infra repo listens for
+      # client-payload: extra data we send along with the signal
+      #   - sha: the exact commit that passed tests
+      #   - ref: which branch triggered this
+      #   - environment: which environment to deploy to
+      - name: Trigger infrastructure deployment
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.PAT_TOKEN }}
+          repository: promise1991/3-tier-infrastructure-ISM-App
+          event-type: deploy-dev
+          client-payload: |
+            {
+              "sha": "${{ github.sha }}",
+              "ref": "${{ github.ref }}",
+              "environment": "dev",
+              "actor": "${{ github.actor }}"
+            }
+
+      - name: Pipeline Summary
+        run: |
+          echo "✅ Tests passed!"
+          echo "🚀 Deployment signal sent to infrastructure repo!"
+          echo "👤 Triggered by: ${{ github.actor }}"
+          echo "📝 Commit: ${{ github.sha }}"
