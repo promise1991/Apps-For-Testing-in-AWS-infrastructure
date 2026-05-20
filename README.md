@@ -414,3 +414,4 @@ The Project explaination
 # CI/CD Test
 # trigger
 # trigger for AMI update
+# debug
